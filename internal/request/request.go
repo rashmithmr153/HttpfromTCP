@@ -1,6 +1,7 @@
 package request
 
 import (
+	"Batman/internal/headers"
 	"errors"
 	"fmt"
 	"io"
@@ -11,11 +12,13 @@ type ParserState int
 
 const (
 	stateInitialized ParserState = iota
+	stateParseHeader
 	stateDone
 )
 
 type Request struct {
 	RequestLine RequestLine
+	Header      headers.Headers
 	State       ParserState
 }
 
@@ -31,23 +34,41 @@ var BAD_REQ = fmt.Errorf("Bad request line")
 const BUFF_SIZE = 8
 
 func (r *Request) parse(data []byte) (int, error) {
+	read := 0
 	switch r.State {
 	case stateInitialized:
+
 		rl, lenRead, err := parseRequestLine(string(data))
+
 		if err != nil {
 			return 0, err
 		}
+
 		if lenRead == 0 {
 			return 0, nil
 		}
+
 		r.RequestLine = *rl
-		r.State = stateDone
-		return lenRead, nil
+		read += lenRead
+		r.State = stateParseHeader
+
+	case stateParseHeader:
+		n, done, err := r.Header.Parse(data)
+
+		if err != nil {
+			return 0, err
+		}
+		if done {
+			r.State = stateDone
+		}
+		read += n
+
 	case stateDone:
 		return 0, fmt.Errorf("error: trying to read data in a done state")
 	default:
 		return 0, fmt.Errorf("error:state")
 	}
+	return read, nil
 }
 
 func parseRequestLine(request string) (*RequestLine, int, error) {
@@ -79,7 +100,10 @@ func parseRequestLine(request string) (*RequestLine, int, error) {
 }
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
-	request := Request{State: stateInitialized}
+	request := Request{
+		State:  stateInitialized,
+		Header: headers.NewHeaders(),
+	}
 	buff := make([]byte, BUFF_SIZE)
 	var readIndex = 0
 	for request.State != stateDone {
@@ -107,5 +131,5 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		copy(buff, buff[parsLen:readIndex])
 		readIndex -= parsLen
 	}
-	return &Request{RequestLine: request.RequestLine}, nil
+	return &request, nil
 }
