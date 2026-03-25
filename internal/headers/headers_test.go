@@ -14,9 +14,10 @@ func TestHeaderLineParse(t *testing.T) { // Test: Valid single header
 	n, done, err := headers.Parse(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
-	assert.Equal(t, "localhost:42069", headers["Host"])
-	assert.Equal(t, 23, n)
-	assert.False(t, done)
+	assert.Equal(t, "localhost:42069", headers.Get("Host"))
+	assert.Equal(t, "", headers.Get("SOmevalue"))
+	assert.Equal(t, 25, n)
+	assert.True(t, done)
 
 	// Test: Invalid spacing header
 	headers = NewHeaders()
@@ -25,4 +26,12 @@ func TestHeaderLineParse(t *testing.T) { // Test: Valid single header
 	require.Error(t, err)
 	assert.Equal(t, 0, n)
 	assert.False(t, done)
+
+	headers = NewHeaders()
+	data = []byte(" H©st: localhost:42069\r\n\r\n")
+	n, done, err = headers.Parse(data)
+	require.Error(t, err)
+	assert.Equal(t, 0, n)
+	assert.False(t, done)
+
 }
