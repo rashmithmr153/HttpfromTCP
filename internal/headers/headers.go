@@ -19,7 +19,13 @@ func (h Headers) Get(name string) string {
 }
 
 func (h Headers) Set(name, value string) {
-	h[strings.ToLower(name)] = value
+	name = strings.ToLower(name)
+
+	if v, ok := h[name]; ok {
+		h[name] = fmt.Sprintf("%s,%s", v, value)
+	} else {
+		h[name] = value
+	}
 }
 
 func isToken(str string) bool {
@@ -84,9 +90,9 @@ func (h Headers) Parse(data []byte) (int, bool, error) {
 		if !isToken(name) {
 			return read, false, fmt.Errorf("Invalid header name")
 		}
-		read += idx + len(CRLF)
-		data = data[read:]
 		h.Set(name, value)
+		data = data[idx+len(CRLF):]
+		read += idx + len(CRLF)
 	}
 	return read, done, nil
 }
