@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 )
 
@@ -13,12 +14,14 @@ type ParserState int
 const (
 	stateInitialized ParserState = iota
 	stateParseHeader
+	stateParseBody
 	stateDone
 )
 
 type Request struct {
 	RequestLine RequestLine
 	Header      headers.Headers
+	Body        []byte
 	State       ParserState
 }
 
@@ -32,6 +35,19 @@ var LINE_SEP = "\r\n"
 var BAD_REQ = fmt.Errorf("Bad request line")
 
 const BUFF_SIZE = 8
+
+func getInt(h headers.Headers, name string, defaultValue int) int {
+	valueStr, exists := h.Get(name)
+	if !exists {
+		return defaultValue
+	}
+	value, err := strconv.Atoi(valueStr)
+	if err != nil {
+		return defaultValue
+	}
+	return value
+
+}
 
 func (r *Request) parse(data []byte) (int, error) {
 	read := 0
@@ -59,9 +75,21 @@ func (r *Request) parse(data []byte) (int, error) {
 			return 0, err
 		}
 		if done {
-			r.State = stateDone
+			r.State = stateParseBody
 		}
 		read += n
+	case stateParseBody:
+		length := getInt(r.Header, "content-length", 0)
+		if length == 0 {
+			r.State = stateDone
+		}
+
+		remaining := min(length-len(r.Body), len(data[read:]))
+		r.Body = append(r.Body, data[read:read+remaining]...)
+		read += remaining
+		if len(r.Body) == length {
+			r.State = stateDone
+		}
 
 	case stateDone:
 		return 0, fmt.Errorf("error: trying to read data in a done state")
@@ -116,6 +144,12 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		readLen, err := reader.Read(buff[readIndex:])
 		if err != nil {
 			if err == io.EOF {
+				if request.State == stateParseBody {
+					length := getInt(request.Header, "content-length", 0)
+					if len(request.Body) != length {
+						return nil, fmt.Errorf("incomplete request body")
+					}
+				}
 				request.State = stateDone
 				break
 			}
