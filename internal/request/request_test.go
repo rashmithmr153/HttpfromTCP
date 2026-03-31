@@ -111,3 +111,102 @@ func TestParseBody(t *testing.T) {
 	r, err = RequestFromReader(reader)
 	require.Error(t, err)
 }
+func TestGetRequestNoBody(t *testing.T) {
+	// This is the core hang scenario — GET with no body, no content-length.
+	// The parser must reach stateDone without waiting for EOF.
+	reader := &chunkReader{
+		data:            "GET / HTTP/1.1\r\nHost: localhost:42069\r\n\r\n",
+		numBytesPerRead: 3,
+	}
+	r, err := RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Equal(t, "GET", r.RequestLine.Method)
+	assert.Equal(t, "/", r.RequestLine.RequestTarget)
+	assert.Equal(t, "1.1", r.RequestLine.HttpVersion)
+	assert.Nil(t, r.Body)
+}
+
+func TestGetRequestNoBodySingleByteReads(t *testing.T) {
+	// Same scenario but with 1 byte per read — stresses state transitions
+	// across many small reads, making it more likely to expose the hang.
+	reader := &chunkReader{
+		data:            "GET / HTTP/1.1\r\nHost: localhost:42069\r\n\r\n",
+		numBytesPerRead: 1,
+	}
+	r, err := RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Equal(t, "GET", r.RequestLine.Method)
+	assert.Nil(t, r.Body)
+}
+
+func TestGetRequestNoBodyLargeReads(t *testing.T) {
+	// Entire request arrives in one read — parser must drain all state
+	// transitions from a single buffer without blocking on next Read.
+	reader := &chunkReader{
+		data:            "GET /path HTTP/1.1\r\nHost: localhost:42069\r\nAccept: */*\r\n\r\n",
+		numBytesPerRead: 1024,
+	}
+	r, err := RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Equal(t, "GET", r.RequestLine.Method)
+	assert.Equal(t, "/path", r.RequestLine.RequestTarget)
+	assert.Nil(t, r.Body)
+}
+
+func TestPostWithExactContentLength(t *testing.T) {
+	// POST where body arrives split across reads — parser must not
+	// block waiting for more data once content-length is satisfied.
+	reader := &chunkReader{
+		data: "POST /submit HTTP/1.1\r\n" +
+			"Host: localhost:42069\r\n" +
+			"Content-Length: 5\r\n" +
+			"\r\n" +
+			"hello",
+		numBytesPerRead: 3,
+	}
+	r, err := RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Equal(t, "hello", string(r.Body))
+}
+
+// func TestPostBodyArrivesWithHeaders(t *testing.T) {
+// 	// Body bytes arrive in the same read as the end of headers (\r\n\r\n).
+// 	// Tests that stateParseBody correctly picks up leftover buffer bytes
+// 	// rather than blocking on the next Read.
+// 	reader := &chunkReader{
+// 		data: "POST /submit HTTP/1.1\r\n" +
+// 			"Host: localhost:42069\r\n" +
+// 			"Content-Length: 5\r\n" +
+// 			"\r\nhello",
+// 		numBytesPerRead: 1024,
+// 	}
+// 	r, err := RequestFromReader(reader)
+// 	require.NoError(t, err)
+// 	require.NotNil(t, r)
+// 	assert.Equal(t, "hello", string(r.Body))
+// }
+
+func TestMultipleHeadersNoBody(t *testing.T) {
+	// Many headers, no body — all state transitions must complete
+	// before blocking on Read.
+	reader := &chunkReader{
+		data: "GET /api HTTP/1.1\r\n" +
+			"Host: localhost:42069\r\n" +
+			"User-Agent: curl/7.81.0\r\n" +
+			"Accept: */*\r\n" +
+			"Connection: keep-alive\r\n" +
+			"\r\n",
+		numBytesPerRead: 5,
+	}
+	r, err := RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Equal(t, "GET", r.RequestLine.Method)
+	assert.Equal(t, "localhost:42069", getValue(r, "Host"))
+	assert.Equal(t, "keep-alive", getValue(r, "connection"))
+	assert.Nil(t, r.Body)
+}

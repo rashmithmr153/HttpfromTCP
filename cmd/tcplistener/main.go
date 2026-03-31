@@ -32,6 +32,9 @@ func main() {
 		for k, v := range userRequest.Header {
 			fmt.Printf("- %s: %s\n", k, v)
 		}
+
+		fmt.Println("Body:")
+		fmt.Println(string(userRequest.Body))
 		fmt.Print("Connection has been closed")
 	}
 

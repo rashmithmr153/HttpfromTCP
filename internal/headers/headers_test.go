@@ -8,14 +8,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func getValue(h Headers, name string) string {
+	value, _ := h.Get(name)
+	return value
+}
+
 func TestHeaderLineParse(t *testing.T) { // Test: Valid single header
 	headers := NewHeaders()
 	data := []byte("Host: localhost:42069\r\n\r\n")
 	n, done, err := headers.Parse(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
-	assert.Equal(t, "localhost:42069", headers.Get("Host"))
-	assert.Equal(t, "", headers.Get("SOmevalue"))
+	assert.Equal(t, "localhost:42069", getValue(headers, "Host"))
+	assert.Equal(t, "", getValue(headers, "SOmevalue"))
 	assert.Equal(t, 25, n)
 	assert.True(t, done)
 
@@ -24,8 +29,8 @@ func TestHeaderLineParse(t *testing.T) { // Test: Valid single header
 	n, done, err = headers.Parse(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
-	assert.Equal(t, "localhost:42069,localhost:420,localhost:69", headers.Get("Host"))
-	assert.Equal(t, "", headers.Get("SOmevalue"))
+	assert.Equal(t, "localhost:42069,localhost:420,localhost:69", getValue(headers, "Host"))
+	assert.Equal(t, "", getValue(headers, "SOmevalue"))
 	assert.Equal(t, 66, n)
 	assert.True(t, done)
 
