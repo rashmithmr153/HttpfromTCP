@@ -45,17 +45,19 @@ func (s *Server) handle(conn net.Conn) {
 	handleErr := &HandlerError{}
 	if err != nil {
 		handleErr.StatusCode = response.StatusBadRequest
-		handleErr.Message = "Bad Request\n"
+		handleErr.Message = err.Error()
 		handleErr.Write(conn)
 		return
 	}
-	buff := &bytes.Buffer{}
+
+	buff := bytes.NewBuffer([]byte{})
 	handleErr = s.handler(buff, request)
 	if handleErr != nil {
 		handleErr.Write(conn)
 		return
 	}
-	headers := response.GetDefaultHeaders(buff.Len())
+	b := buff.Bytes()
+	headers := response.GetDefaultHeaders(len(b))
 	response.WriteStatusLine(conn, response.StatusOK)
 	response.WriteHeaders(conn, headers)
 	conn.Write(buff.Bytes())
