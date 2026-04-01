@@ -28,6 +28,13 @@ func (h Headers) Set(name, value string) {
 		h[name] = value
 	}
 }
+func (h Headers) Override(name, value string) {
+	h[strings.ToLower(name)] = value // replaces, doesn't append
+}
+
+func (h Headers) Delete(name string) {
+	delete(h, name)
+}
 
 func isToken(str string) bool {
 	for _, ch := range str {
