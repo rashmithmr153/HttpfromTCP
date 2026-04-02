@@ -107,6 +107,14 @@ func handlerFunc(w *response.Writer, req *request.Request) {
 			w.WriteStatusLine(response.StatusInternalServerError)
 			w.WriteHeaders(h)
 			w.WriteBody(body)
+		case "/video":
+			file, _ := os.ReadFile("assets/vim.mp4")
+			h := response.GetDefaultHeaders(len(file))
+			h.Override("content-type", "video/mp4")
+			h.Override("content-length", fmt.Sprintf("%d", len(file)))
+			w.WriteStatusLine(response.StatusOK)
+			w.WriteHeaders(h)
+			w.WriteBody(file)
 		default:
 			body := []byte(`
 		<html>
