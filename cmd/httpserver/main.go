@@ -1,13 +1,17 @@
 package main
 
 import (
+	"Batman/internal/headers"
 	"Batman/internal/request"
 	"Batman/internal/response"
 	"Batman/internal/server"
+	"crypto/sha256"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 )
@@ -47,18 +51,30 @@ func handlerFunc(w *response.Writer, req *request.Request) {
 		h.Delete("content-length")
 		h.Delete("content-type")
 		h.Set("Transfer-Encoding", "chunked")
+		if endPoint == "/html" {
+			h.Override("trailer", "X-Content-SHA256, X-Content-Length")
+		}
 		w.WriteHeaders(h)
+		var fullBody []byte
 		buf := make([]byte, 32)
 		for {
 			n, err := res.Body.Read(buf)
 			if n > 0 {
+				fullBody = append(fullBody, buf[:n]...)
 				w.WriteChunkedBody(buf[:n])
 			}
 			if err != nil {
 				break
 			}
 		}
-		w.WriteChunkedBodyDone()
+		if endPoint == "/html" {
+			w.WriteChunkedBodyDone()
+			trailer := headers.NewHeaders()
+			hash := sha256.Sum256(fullBody)
+			trailer.Set("x-content-SHA256", fmt.Sprintf("%x", hash))
+			trailer.Set("X-content-length", strconv.Itoa(len(fullBody)))
+			w.WriteTrailers(trailer)
+		}
 	} else {
 		switch endPoint {
 		case "/yourproblem":
